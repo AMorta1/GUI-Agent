@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import cv2
 import numpy as np
 import pytest
 
 from gui_agent.perception import (
     EasyOcrRecognizer,
     TextElement,
+    detect_ui_candidates,
+    draw_candidate_boxes,
     draw_text_boxes,
     map_text_elements,
     normalize_ocr_results,
@@ -75,6 +78,48 @@ def test_draw_text_boxes_returns_annotated_copy() -> None:
     assert np.count_nonzero(annotated) > 0
 
 
+def test_detect_ui_candidates_finds_rectangular_region() -> None:
+    image = np.full((160, 240, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (30, 40), (170, 105), (0, 0, 0), 4)
+
+    boxes = detect_ui_candidates(image, max_area_ratio=0.5)
+
+    matching_boxes = [
+        box
+        for box in boxes
+        if abs(box[0] - 30) <= 5
+        and abs(box[1] - 40) <= 5
+        and abs(box[2] - 170) <= 5
+        and abs(box[3] - 105) <= 5
+    ]
+    assert len(matching_boxes) == 1
+
+
+def test_detect_ui_candidates_filters_small_noise() -> None:
+    image = np.full((100, 160, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (10, 10), (16, 16), (0, 0, 0), 2)
+    cv2.rectangle(image, (50, 50), (58, 58), (0, 0, 0), 2)
+
+    assert detect_ui_candidates(image) == []
+
+
+def test_detect_ui_candidates_supports_blank_grayscale_image() -> None:
+    image = np.zeros((80, 120), dtype=np.uint8)
+
+    assert detect_ui_candidates(image) == []
+
+
+def test_draw_candidate_boxes_returns_annotated_copy() -> None:
+    image = np.zeros((100, 200, 3), dtype=np.uint8)
+
+    annotated = draw_candidate_boxes(image, [(20, 10, 100, 50)])
+
+    assert annotated.shape == image.shape
+    assert annotated.dtype == image.dtype
+    assert np.count_nonzero(image) == 0
+    assert np.count_nonzero(annotated) > 0
+
+
 @pytest.mark.parametrize(
     ("call", "message"),
     [
@@ -102,6 +147,20 @@ def test_draw_text_boxes_returns_annotated_copy() -> None:
             lambda: draw_text_boxes(
                 np.zeros((10, 10, 3), dtype=np.uint8),
                 [TextElement("x", 0.5, (1, 1, 10, 9))],
+            ),
+            "within",
+        ),
+        (
+            lambda: detect_ui_candidates(
+                np.zeros((10, 10, 3), dtype=np.uint8),
+                max_area_ratio=0.0,
+            ),
+            "between 0 and 1",
+        ),
+        (
+            lambda: draw_candidate_boxes(
+                np.zeros((10, 10, 3), dtype=np.uint8),
+                [(1, 1, 10, 9)],
             ),
             "within",
         ),

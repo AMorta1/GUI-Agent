@@ -19,11 +19,18 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from gui_agent.capture import capture_screen, resize_image
 from gui_agent.control import DesktopController
-from gui_agent.perception import EasyOcrRecognizer, draw_text_boxes, map_text_elements
+from gui_agent.perception import (
+    EasyOcrRecognizer,
+    detect_ui_candidates,
+    draw_candidate_boxes,
+    draw_text_boxes,
+    map_text_elements,
+)
 
 
 OCR_TARGET = "GUI AGENT OCR TEST 7429"
 CHINESE_TARGET = "屏幕文字识别"
+CHINESE_INPUT_TARGET = "中文输入验证"
 
 
 class ValidationWindow(QtWidgets.QWidget):
@@ -77,6 +84,12 @@ class ValidationWindow(QtWidgets.QWidget):
         self.drag_slider.setValue(20)
         self.drag_slider.setFixedHeight(44)
 
+        self.candidate_region = QtWidgets.QFrame()
+        self.candidate_region.setFixedSize(320, 80)
+        self.candidate_region.setStyleSheet(
+            "background: #d9d9d9; border: 4px solid #202020;"
+        )
+
         self.status_label = QtWidgets.QLabel("READY")
         self.status_label.setAlignment(QtCore.Qt.AlignCenter)
         self.status_label.setStyleSheet("font-size: 18px; font-weight: 600;")
@@ -90,6 +103,7 @@ class ValidationWindow(QtWidgets.QWidget):
         layout.addLayout(action_row)
         layout.addWidget(self.scroll_area)
         layout.addWidget(self.drag_slider)
+        layout.addWidget(self.candidate_region, alignment=QtCore.Qt.AlignCenter)
         layout.addWidget(self.status_label)
 
     def _mark_button_clicked(self) -> None:
@@ -361,6 +375,109 @@ def run_control_validation(
         app.exit(1)
 
 
+def run_chinese_input_validation(
+    app: QtWidgets.QApplication,
+    window: ValidationWindow,
+) -> None:
+    try:
+        physical_size = capture_screen().region.size
+        input_point = _physical_point(
+            window,
+            window.input_field,
+            window.input_field.rect().center(),
+            physical_size,
+        )
+
+        window.input_field.clear()
+        controller = DesktopController()
+        controller.click(input_point, duration=0.1)
+        controller.paste_text(CHINESE_INPUT_TARGET)
+        QtTest.QTest.qWait(300)
+        app.processEvents()
+        if window.input_field.text() != CHINESE_INPUT_TARGET:
+            raise RuntimeError(
+                f"Chinese input mismatch: {window.input_field.text()!r}"
+            )
+
+        window.status_label.setText("CHINESE INPUT PASS")
+        print(f"input_point={input_point}")
+        print(f"result_text={window.input_field.text()!r}")
+        print("chinese_input_desktop_validation=PASS")
+        app.exit(0)
+    except Exception:
+        traceback.print_exc()
+        app.exit(1)
+
+
+def _box_iou(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> float:
+    left = max(first[0], second[0])
+    top = max(first[1], second[1])
+    right = min(first[2], second[2])
+    bottom = min(first[3], second[3])
+    if left > right or top > bottom:
+        return 0.0
+    intersection = (right - left + 1) * (bottom - top + 1)
+    first_area = (first[2] - first[0] + 1) * (first[3] - first[1] + 1)
+    second_area = (second[2] - second[0] + 1) * (second[3] - second[1] + 1)
+    return intersection / (first_area + second_area - intersection)
+
+
+def run_candidate_validation(
+    app: QtWidgets.QApplication,
+    window: ValidationWindow,
+) -> None:
+    try:
+        window_image, window_origin, physical_size = _capture_window_image(window)
+        boxes = detect_ui_candidates(window_image)
+
+        target_top_left = _physical_point(
+            window,
+            window.candidate_region,
+            QtCore.QPoint(0, 0),
+            physical_size,
+        )
+        target_bottom_right = _physical_point(
+            window,
+            window.candidate_region,
+            QtCore.QPoint(
+                window.candidate_region.width() - 1,
+                window.candidate_region.height() - 1,
+            ),
+            physical_size,
+        )
+        target_box = (
+            target_top_left[0] - window_origin[0],
+            target_top_left[1] - window_origin[1],
+            target_bottom_right[0] - window_origin[0],
+            target_bottom_right[1] - window_origin[1],
+        )
+        best_iou = max((_box_iou(box, target_box) for box in boxes), default=0.0)
+        if best_iou < 0.5:
+            raise RuntimeError(
+                "Candidate detector did not locate the known rectangular region; "
+                f"target={target_box!r}, boxes={boxes!r}, best_iou={best_iou:.3f}"
+            )
+
+        annotated = draw_candidate_boxes(window_image, boxes)
+        output_path = Path(tempfile.gettempdir()) / "gui_agent_week2_candidates.png"
+        if not cv2.imwrite(str(output_path), annotated):
+            raise RuntimeError(f"Failed to save candidate annotation: {output_path}")
+
+        print(f"target_box={target_box}")
+        print(f"candidate_count={len(boxes)}")
+        print(f"candidate_boxes={boxes}")
+        print(f"best_target_iou={best_iou:.3f}")
+        print(f"annotated_window={output_path}")
+        print("candidate_desktop_validation=PASS")
+        app.exit(0)
+    except Exception:
+        traceback.print_exc()
+        app.exit(1)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -374,15 +491,32 @@ def parse_args() -> argparse.Namespace:
         help="Run click, input, scroll, and drag validation and exit.",
     )
     parser.add_argument(
+        "--chinese-input-check",
+        action="store_true",
+        help="Run clipboard-based Chinese input validation and exit.",
+    )
+    parser.add_argument(
         "--integration-check",
         action="store_true",
         help="Run the screenshot-to-control integration validation and exit.",
+    )
+    parser.add_argument(
+        "--candidate-check",
+        action="store_true",
+        help="Run rectangular UI candidate detection and bbox validation.",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.chinese_input_check:
+        print(
+            "WARNING: This validation will overwrite the current text clipboard, "
+            "move the mouse, click the test input, and send the paste shortcut."
+        )
+        input("Press Enter to continue, or Ctrl+C to cancel: ")
+
     app = QtWidgets.QApplication([])
     window = ValidationWindow()
     window.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint, True)
@@ -394,8 +528,15 @@ def main() -> int:
         QtCore.QTimer.singleShot(1200, lambda: run_ocr_validation(app, window))
     elif args.control_check:
         QtCore.QTimer.singleShot(1200, lambda: run_control_validation(app, window))
+    elif args.chinese_input_check:
+        QtCore.QTimer.singleShot(
+            1200,
+            lambda: run_chinese_input_validation(app, window),
+        )
     elif args.integration_check:
         QtCore.QTimer.singleShot(1200, lambda: run_integration_validation(app, window))
+    elif args.candidate_check:
+        QtCore.QTimer.singleShot(1200, lambda: run_candidate_validation(app, window))
     return app.exec_()
 
 

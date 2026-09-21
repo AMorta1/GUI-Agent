@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from math import isfinite
 from numbers import Real
+import sys
 from typing import Any, TypeAlias
 
 import pyautogui
+import pyperclip
 
 
 ScreenPoint: TypeAlias = tuple[int, int]
@@ -41,6 +43,21 @@ class DesktopController:
             raise ValueError("Week 2 text input supports ASCII only")
         self._validate_duration(interval, name="Typing interval")
         self._backend.write(text, interval=float(interval))
+
+    def paste_text(self, text: str) -> None:
+        """Paste Unicode text through the system clipboard.
+
+        The clipboard is intentionally not restored after the paste operation.
+        """
+
+        if not isinstance(text, str):
+            raise TypeError("Text input must be a string")
+        if not text:
+            raise ValueError("Text input must not be empty")
+
+        pyperclip.copy(text)
+        modifier = "command" if sys.platform == "darwin" else "ctrl"
+        self._backend.hotkey(modifier, "v")
 
     def scroll(self, clicks: int, *, point: ScreenPoint | None = None) -> None:
         if not isinstance(clicks, int) or isinstance(clicks, bool):

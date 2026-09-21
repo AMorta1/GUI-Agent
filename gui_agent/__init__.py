@@ -12,6 +12,8 @@ from .capture import (
 from .perception import (
     EasyOcrRecognizer,
     TextElement,
+    detect_ui_candidates,
+    draw_candidate_boxes,
     draw_text_boxes,
     map_text_elements,
     normalize_ocr_results,
@@ -28,6 +30,8 @@ __all__ = [
     "resize_image",
     "EasyOcrRecognizer",
     "TextElement",
+    "detect_ui_candidates",
+    "draw_candidate_boxes",
     "draw_text_boxes",
     "map_text_elements",
     "normalize_ocr_results",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import gui_agent.control as control_module
 from gui_agent.control import DesktopController
 
 
@@ -18,6 +19,9 @@ class FakePyAutoGUI:
 
     def write(self, text: str, *, interval: float) -> None:
         self.calls.append(("write", text, interval))
+
+    def hotkey(self, *keys: str) -> None:
+        self.calls.append(("hotkey", *keys))
 
     def moveTo(self, x: int, y: int, *, duration: float) -> None:
         self.calls.append(("moveTo", x, y, duration))
@@ -62,6 +66,34 @@ def test_type_text_calls_backend(
     assert backend.calls == [("write", "GUI Agent 123", 0.05)]
 
 
+def test_paste_text_uses_clipboard_and_ctrl_v(
+    controller: DesktopController,
+    backend: FakePyAutoGUI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clipboard_values: list[str] = []
+    monkeypatch.setattr(control_module.pyperclip, "copy", clipboard_values.append)
+    monkeypatch.setattr(control_module.sys, "platform", "win32")
+
+    controller.paste_text("中文输入验证")
+
+    assert clipboard_values == ["中文输入验证"]
+    assert backend.calls == [("hotkey", "ctrl", "v")]
+
+
+def test_paste_text_uses_command_v_on_macos(
+    controller: DesktopController,
+    backend: FakePyAutoGUI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(control_module.pyperclip, "copy", lambda text: None)
+    monkeypatch.setattr(control_module.sys, "platform", "darwin")
+
+    controller.paste_text("中文")
+
+    assert backend.calls == [("hotkey", "command", "v")]
+
+
 def test_scroll_moves_to_target_first(
     controller: DesktopController,
     backend: FakePyAutoGUI,
@@ -96,6 +128,8 @@ def test_drag_moves_to_start_then_drags(
         (lambda item: item.click((10, 10), duration=-1), ValueError, "non-negative"),
         (lambda item: item.type_text(""), ValueError, "empty"),
         (lambda item: item.type_text("中文"), ValueError, "ASCII"),
+        (lambda item: item.paste_text(""), ValueError, "empty"),
+        (lambda item: item.paste_text(123), TypeError, "string"),
         (lambda item: item.scroll(0), ValueError, "zero"),
         (lambda item: item.scroll(1.5), TypeError, "integer"),
     ],

@@ -161,6 +161,121 @@ def draw_text_boxes(
     return annotated
 
 
+def detect_ui_candidates(
+    image: NDArray[np.uint8],
+    *,
+    min_width: int = 24,
+    min_height: int = 16,
+    min_area: int = 400,
+    max_area_ratio: float = 0.4,
+    min_rectangularity: float = 0.6,
+) -> list[PixelBox]:
+    """Return rectangular visual candidates without assigning UI semantics."""
+
+    width, height = _validate_image(image)
+    if image.ndim == 3 and image.shape[2] != 3:
+        raise ValueError("Candidate detection requires a grayscale or BGR image")
+    for value, name in (
+        (min_width, "Minimum width"),
+        (min_height, "Minimum height"),
+        (min_area, "Minimum area"),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    for value, name in (
+        (max_area_ratio, "Maximum area ratio"),
+        (min_rectangularity, "Minimum rectangularity"),
+    ):
+        if (
+            not isinstance(value, Real)
+            or isinstance(value, bool)
+            or not isfinite(float(value))
+            or not 0.0 < float(value) <= 1.0
+        ):
+            raise ValueError(f"{name} must be between 0 and 1")
+
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    closed = cv2.morphologyEx(
+        edges,
+        cv2.MORPH_CLOSE,
+        np.ones((3, 3), dtype=np.uint8),
+    )
+    contours, _ = cv2.findContours(
+        closed,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+
+    image_area = width * height
+    raw_boxes: list[PixelBox] = []
+    for contour in contours:
+        x, y, box_width, box_height = cv2.boundingRect(contour)
+        box_area = box_width * box_height
+        if (
+            box_width < min_width
+            or box_height < min_height
+            or box_area < min_area
+            or box_area / image_area > float(max_area_ratio)
+        ):
+            continue
+        contour_area = cv2.contourArea(contour)
+        if contour_area / box_area < float(min_rectangularity):
+            continue
+        raw_boxes.append((x, y, x + box_width - 1, y + box_height - 1))
+
+    boxes: list[PixelBox] = []
+    for box in sorted(raw_boxes, key=_box_area, reverse=True):
+        if not any(_box_iou(box, kept) >= 0.8 for kept in boxes):
+            boxes.append(box)
+    return sorted(boxes, key=lambda box: (box[1], box[0], -_box_area(box)))
+
+
+def draw_candidate_boxes(
+    image: NDArray[np.uint8],
+    boxes: Sequence[PixelBox],
+    *,
+    color: tuple[int, int, int] = (0, 0, 255),
+    thickness: int = 2,
+) -> NDArray[np.uint8]:
+    """Return a copy of a BGR image with visual candidate boxes."""
+
+    width, height = _validate_image(image)
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("Box drawing requires a BGR image")
+    if not isinstance(thickness, int) or isinstance(thickness, bool) or thickness <= 0:
+        raise ValueError("Box thickness must be a positive integer")
+
+    annotated = image.copy()
+    for box in boxes:
+        if len(box) != 4 or any(
+            not isinstance(value, int) or isinstance(value, bool) for value in box
+        ):
+            raise TypeError("Candidate box must contain four integer coordinates")
+        left, top, right, bottom = box
+        if not (0 <= left < right < width and 0 <= top < bottom < height):
+            raise ValueError("Candidate box must lie within the image")
+        cv2.rectangle(annotated, (left, top), (right, bottom), color, thickness)
+    return annotated
+
+
+def _box_area(box: PixelBox) -> int:
+    left, top, right, bottom = box
+    return (right - left + 1) * (bottom - top + 1)
+
+
+def _box_iou(first: PixelBox, second: PixelBox) -> float:
+    left = max(first[0], second[0])
+    top = max(first[1], second[1])
+    right = min(first[2], second[2])
+    bottom = min(first[3], second[3])
+    if left > right or top > bottom:
+        return 0.0
+    intersection = (right - left + 1) * (bottom - top + 1)
+    return intersection / (_box_area(first) + _box_area(second) - intersection)
+
+
 def _validate_image(image: NDArray[np.uint8]) -> Size:
     if not isinstance(image, np.ndarray):
         raise TypeError("Image must be a NumPy array")
