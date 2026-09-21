@@ -16,6 +16,7 @@ PACKAGES = (
     "pynput",
     "opencv-python",
     "PyQt5",
+    "easyocr",
     "PyYAML",
     "psutil",
     "pytest",
@@ -28,6 +29,7 @@ def package_version(distribution: str) -> str:
 
 def verify_packages() -> None:
     import cv2
+    import easyocr
     import mss
     import pyautogui
     import pynput
@@ -37,6 +39,7 @@ def verify_packages() -> None:
     for package in PACKAGES:
         print(f"{package}: {package_version(package)}")
     print(f"OpenCV import: {cv2.__version__}")
+    print(f"EasyOCR import: {easyocr.__version__}")
     print(f"Qt runtime: {QtCore.QT_VERSION_STR}")
     print(f"PyAutoGUI screen size: {pyautogui.size()}")
     print(f"pynput import: {package_version('pynput')}")
