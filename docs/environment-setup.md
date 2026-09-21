@@ -6,14 +6,14 @@
 
 - Python 3.10 独立开发环境；
 - PyTorch 2.2+ 与 NVIDIA CUDA 加速；
-- 第 2 周所需的跨平台截图、桌面控制、OpenCV 和 PyQt5 基础库；
+- 第 2 周所需的跨平台截图、桌面控制、OpenCV、PyQt5 和 EasyOCR；
 - 可重复执行的 PyTorch、CUDA、基础库和内存截图验证。
 
-OCR、Agent 框架、模型部署和 LoRA 相关依赖将在对应开发阶段根据实际选型加入，避免在 PaddleOCR/EasyOCR、LangChain/LlamaIndex 和具体 VLM 尚未确定前引入不必要的依赖冲突。
+第 2 周 OCR 后端已确定为 EasyOCR。Agent 框架、模型部署和 LoRA 相关依赖将在对应开发阶段根据实际选型加入，避免提前引入不必要的依赖冲突。
 
 ## 2. 当前验证环境
 
-验证日期：2026-09-14
+验证日期：2026-09-20
 
 | 项目 | 当前配置 |
 |---|---|
@@ -29,6 +29,7 @@ OCR、Agent 框架、模型部署和 LoRA 相关依赖将在对应开发阶段�
 | PyTorch | 2.13.0+cu130 |
 | TorchVision | 0.28.0+cu130 |
 | PyTorch CUDA Runtime | 13.0 |
+| 下载模型缓存根目录 | `E:\Projects\Microsoft\.model-cache` |
 
 `nvidia-smi` 中的 CUDA 版本表示驱动支持的最高 CUDA 版本，并不表示系统已经安装同版本 CUDA Toolkit。本机当前没有检测到 `nvcc`，但 PyTorch 官方二进制包已携带所需 CUDA Runtime，因此不影响当前模型推理和训练。只有后续需要编译自定义 CUDA 扩展时，才需要单独安装 CUDA Toolkit 和相应编译工具。
 
@@ -70,6 +71,7 @@ python scripts/verify_environment.py --require-cuda
 4. mss 在内存中截取一帧并由 OpenCV 转换；
 5. PyTorch CUDA 可用性和 GPU 信息；
 6. 在 GPU 上执行矩阵乘法并检查结果是否为有限值。
+7. EasyOCR 安装版本和导入状态。
 
 脚本不会保存屏幕截图，也不会移动鼠标或发送键盘输入。无图形界面的环境可以使用 `--skip-screen` 跳过截图测试。
 
@@ -86,7 +88,9 @@ python scripts/verify_environment.py --require-cuda
 | GPU 矩阵乘法 | 通过，结果均为有限值 |
 | 基础库导入 | 通过 |
 | PyAutoGUI 屏幕尺寸 | 2560 × 1600 |
+| Windows 显示缩放 | 150% |
 | mss 内存截图 | 通过，输出数组为 1600 × 2560 × 3 |
+| EasyOCR | 1.7.2，CUDA 模型初始化和英文合成图推理通过 |
 | `pip check` | 通过，无依赖冲突 |
 
 ## 6. 后续阶段依赖
@@ -95,14 +99,34 @@ python scripts/verify_environment.py --require-cuda
 
 | 阶段 | 待加入依赖 |
 |---|---|
-| 第 2 周 OCR 对比 | PaddleOCR、PaddlePaddle、EasyOCR |
+| 第 2 周 OCR | EasyOCR 1.7.2（已加入）；PaddleOCR 仅作为有余力时的对比项 |
 | 第 3 周 Agent 与数据 | LangChain/LlamaIndex、Transformers、Datasets、Pandas |
 | 第 5 周模型微调 | PEFT、Accelerate、bitsandbytes |
 | 第 7 周评估 | Matplotlib、Seaborn |
 
 每组依赖会在对应模块开始前，根据模型、GPU 和跨平台兼容性确定版本并单独记录。
 
-## 7. 常见问题
+## 7. 下载模型缓存
+
+本机将下载的第三方基础模型统一放在：
+
+```text
+E:\Projects\Microsoft\.model-cache
+```
+
+EasyOCR 使用用户级环境变量：
+
+```text
+EASYOCR_MODULE_PATH=E:\Projects\Microsoft\.model-cache\easyocr
+```
+
+其模型文件实际位于 `E:\Projects\Microsoft\.model-cache\easyocr\model`。当前模型已从 EasyOCR 默认的用户缓存迁移到该目录，并通过 CUDA 推理复测。
+
+该绝对路径只属于本机环境配置，不写入业务代码。其他计算机可以继续使用各工具的默认缓存路径，也可以设置适合本机的路径。后续引入 Hugging Face、Torch Hub 等工具时，分别配置其官方缓存环境变量和独立子目录。
+
+下载的基础模型缓存不提交 Git。项目训练产生的 LoRA 权重、检查点和实验结果属于项目产物，不放入 `.model-cache`，其目录在对应开发阶段另行确定。
+
+## 8. 常见问题
 
 ### `nvidia-smi` 显示 CUDA，但 `nvcc` 不存在
 
@@ -123,7 +147,7 @@ python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda
 
 8GB 显存满足项目大纲的推荐配置，但不代表能够以全精度直接部署或微调所有 9B/11B 多模态模型。后续模型选择需要结合量化、LoRA/QLoRA、梯度检查点或云端 GPU 资源进行实际验证。
 
-## 8. 官方参考
+## 9. 官方参考
 
 - [PyTorch - Start Locally](https://pytorch.org/get-started/locally/)
 - [PyTorch - Previous Versions](https://pytorch.org/get-started/previous-versions/)
