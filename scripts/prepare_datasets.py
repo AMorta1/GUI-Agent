@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     screenagent = subparsers.add_parser("screenagent")
     _add_common_arguments(screenagent)
     screenagent.add_argument("--source", type=Path, required=True)
+    screenagent.add_argument("--split", choices=("train", "test"), required=True)
 
     webarena = subparsers.add_parser("webarena")
     _add_common_arguments(webarena)
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = convert_screenagent(
             args.source,
             args.output,
+            split=args.split,
             revision=args.revision,
             source_acquired_at=args.source_acquired_at,
             limit=args.limit,

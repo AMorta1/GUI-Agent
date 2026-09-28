@@ -7,7 +7,7 @@
 和 `errors.jsonl` 中记录固定的源 revision、许可、获取日期、数量与错误。
 
 ```powershell
-python scripts/prepare_datasets.py screenagent --source <train-dir> --output <output-dir> --revision <commit> --source-acquired-at <date> --limit 20
+python scripts/prepare_datasets.py screenagent --source <split-dir> --split <train|test> --output <output-dir> --revision <commit> --source-acquired-at <date> --limit 20
 python scripts/prepare_datasets.py webarena --source <config-dir> --output <output-dir> --revision <commit> --source-acquired-at <date> --limit 20
 python scripts/prepare_datasets.py mind2web --cache-dir <dataset-cache> --output <output-dir> --revision <revision> --source-acquired-at <date> --limit 20
 ```

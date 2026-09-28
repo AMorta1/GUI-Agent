@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 SCHEMA_VERSION = "1.0"
+SCREENAGENT_DATASET_LICENSE = "Apache-2.0"
 ActionType = Literal[
     "click",
     "type",
@@ -125,24 +126,25 @@ def convert_screenagent(
     source_dir: str | Path,
     output_dir: str | Path,
     *,
+    split: Literal["train", "test"],
     revision: str,
     source_acquired_at: str,
     limit: int | None = None,
 ) -> ConversionManifest:
-    """Convert ScreenAgent JSON annotations into one record per action."""
+    """Convert one ScreenAgent split into one canonical record per action."""
 
     source_root = Path(source_dir)
     if not source_root.is_dir():
         raise FileNotFoundError(f"ScreenAgent source directory not found: {source_root}")
-    events = _iter_screenagent_events(source_root, revision)
+    events = _iter_screenagent_events(source_root, revision, split)
     return _write_conversion(
         events,
         output_dir,
         dataset="screenagent",
-        split="train",
+        split=split,
         source_url="https://github.com/niuzaisheng/ScreenAgent",
         revision=revision,
-        license_name="MIT",
+        license_name=SCREENAGENT_DATASET_LICENSE,
         source_acquired_at=source_acquired_at,
         limit=limit,
     )
@@ -206,6 +208,7 @@ def convert_mind2web(
 def _iter_screenagent_events(
     source_root: Path,
     revision: str,
+    split: Literal["train", "test"],
 ) -> Iterator[ConversionEvent]:
     step_indexes: dict[str, int] = {}
     annotation_files = sorted(source_root.rglob("*_translate.json"))
@@ -258,10 +261,10 @@ def _iter_screenagent_events(
                     record_kind="trajectory_step",
                     source=SourceInfo(
                         dataset="screenagent",
-                        split="train",
+                        split=split,
                         record_id=action_source_id,
                         revision=revision,
-                        license="MIT",
+                        license=SCREENAGENT_DATASET_LICENSE,
                     ),
                     task=TaskInfo(task_id=session_id, instruction=instruction),
                     step=TrajectoryStep(
@@ -273,7 +276,7 @@ def _iter_screenagent_events(
                         ),
                         action=_convert_screenagent_action(action),
                     ),
-                    training_eligible=True,
+                    training_eligible=split == "train",
                 )
                 yield ConversionEvent(source_id=action_source_id, record=record)
             except (KeyError, TypeError, ValueError) as exc:

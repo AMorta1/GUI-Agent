@@ -77,7 +77,9 @@ def test_observation_requires_complete_image_metadata() -> None:
         Observation(image_path="screen.jpg", image_width=10)
 
 
-def test_screenagent_converts_actions_and_original_pixel_point(tmp_path: Path) -> None:
+def test_screenagent_preserves_split_eligibility_license_and_actions(
+    tmp_path: Path,
+) -> None:
     source = _write_screenagent_fixture(
         tmp_path / "source",
         _screenagent_record(
@@ -92,20 +94,32 @@ def test_screenagent_converts_actions_and_original_pixel_point(tmp_path: Path) -
         ),
     )
 
-    manifest = convert_screenagent(
-        source,
-        tmp_path / "output",
-        revision=REVISION,
-        source_acquired_at=ACQUIRED_AT,
-    )
-    rows = _read_jsonl(tmp_path / "output" / "records.jsonl")
+    for split, expected_training_eligible in (("train", True), ("test", False)):
+        output = tmp_path / f"output-{split}"
+        manifest = convert_screenagent(
+            source,
+            output,
+            split=split,
+            revision=REVISION,
+            source_acquired_at=ACQUIRED_AT,
+        )
+        rows = _read_jsonl(output / "records.jsonl")
 
-    assert manifest.records_written == 2
-    assert manifest.records_skipped == 0
-    assert rows[0]["step"]["action"]["point"] == [7.0, 3.0]
-    assert rows[0]["step"]["observation"]["image_width"] == 10
-    assert rows[1]["step"]["action"]["type"] == "other"
-    assert rows[1]["step"]["action"]["raw_action"]["value"] == "kept in raw action"
+        assert manifest.split == split
+        assert manifest.license == "Apache-2.0"
+        assert manifest.records_written == 2
+        assert manifest.records_skipped == 0
+        assert all(row["source"]["split"] == split for row in rows)
+        assert all(row["source"]["license"] == "Apache-2.0" for row in rows)
+        assert all(
+            row["training_eligible"] is expected_training_eligible for row in rows
+        )
+        assert rows[0]["step"]["action"]["point"] == [7.0, 3.0]
+        assert rows[0]["step"]["observation"]["image_width"] == 10
+        assert rows[1]["step"]["action"]["type"] == "other"
+        assert rows[1]["step"]["action"]["raw_action"]["value"] == (
+            "kept in raw action"
+        )
 
 
 def test_screenagent_records_missing_image_error(tmp_path: Path) -> None:
@@ -118,6 +132,7 @@ def test_screenagent_records_missing_image_error(tmp_path: Path) -> None:
     manifest = convert_screenagent(
         source,
         tmp_path / "output",
+        split="train",
         revision=REVISION,
         source_acquired_at=ACQUIRED_AT,
     )
@@ -136,6 +151,7 @@ def test_screenagent_records_corrupt_json_error(tmp_path: Path) -> None:
     manifest = convert_screenagent(
         source,
         tmp_path / "output",
+        split="train",
         revision=REVISION,
         source_acquired_at=ACQUIRED_AT,
     )
@@ -281,6 +297,7 @@ def test_repeated_conversion_has_stable_jsonl_and_manifest(tmp_path: Path) -> No
     convert_screenagent(
         source,
         output,
+        split="train",
         revision=REVISION,
         source_acquired_at=ACQUIRED_AT,
     )
@@ -289,6 +306,7 @@ def test_repeated_conversion_has_stable_jsonl_and_manifest(tmp_path: Path) -> No
     convert_screenagent(
         source,
         output,
+        split="train",
         revision=REVISION,
         source_acquired_at=ACQUIRED_AT,
     )
