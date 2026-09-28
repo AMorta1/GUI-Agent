@@ -20,6 +20,13 @@ PACKAGES = (
     "PyYAML",
     "psutil",
     "pytest",
+    "datasets",
+    "pydantic",
+    "httpx",
+    "transformers",
+    "accelerate",
+    "qwen-vl-utils",
+    "langchain",
 )
 
 
@@ -30,9 +37,14 @@ def package_version(distribution: str) -> str:
 def verify_packages() -> None:
     import cv2
     import easyocr
+    import datasets
+    import httpx
+    import langchain
     import mss
+    import pydantic
     import pyautogui
     import pynput
+    import transformers
     from PyQt5 import QtCore
 
     print("\n[packages]")
@@ -44,6 +56,11 @@ def verify_packages() -> None:
     print(f"PyAutoGUI screen size: {pyautogui.size()}")
     print(f"pynput import: {package_version('pynput')}")
     print(f"mss import: {package_version('mss')}")
+    print(f"Datasets import: {datasets.__version__}")
+    print(f"Pydantic import: {pydantic.__version__}")
+    print(f"HTTPX import: {httpx.__version__}")
+    print(f"Transformers import: {transformers.__version__}")
+    print(f"LangChain import: {langchain.__version__}")
 
 
 def verify_screen_capture() -> None:

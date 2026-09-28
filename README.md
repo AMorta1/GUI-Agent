@@ -1,4 +1,32 @@
 # GUI-Agent
+
+## 第三周：数据集与规划 Agent
+
+第三周新增统一 JSONL schema，以及 ScreenAgent、WebArena、Multimodal-Mind2Web
+三个转换器。原始数据集和预处理结果保存在仓库外；每次转换都会在 `manifest.json`
+和 `errors.jsonl` 中记录固定的源 revision、许可、获取日期、数量与错误。
+
+```powershell
+python scripts/prepare_datasets.py screenagent --source <train-dir> --output <output-dir> --revision <commit> --source-acquired-at <date> --limit 20
+python scripts/prepare_datasets.py webarena --source <config-dir> --output <output-dir> --revision <commit> --source-acquired-at <date> --limit 20
+python scripts/prepare_datasets.py mind2web --cache-dir <dataset-cache> --output <output-dir> --revision <revision> --source-acquired-at <date> --limit 20
+```
+
+规划演示只读取已有静态图片并返回通过校验的计划 JSON，不会截取桌面、移动鼠标、
+输入键盘或调用第二周控制模块。首次下载模型前需要先配置 Hugging Face 缓存；下面的
+`--cache-dir` 指向项目级 `.model-cache` 下的 `huggingface/hub` 目录。
+
+```powershell
+python scripts/week3_demo.py --provider local --cache-dir <model-hub-cache> --offline --image <screenshot> --task "Describe the requested GUI task and produce a plan"
+```
+
+可通过 `--provider api`、`--base-url`、`--model` 和 `--api-key-env` 选择
+OpenAI-compatible 端点。密钥只从指定环境变量读取。
+
+已使用智谱 OpenAI-compatible 端点和 `glm-4v-flash` 完成真实多模态 smoke
+验证：图片请求、模型响应和 `TaskPlan` 结构化解析链路可用，凭证未写入仓库。
+该结果只代表接口链路通过；实际计划仍可能遗漏清空旧文本、最终结果验证等语义步骤，
+具体结果与限制见第三周实验报告。
 基于多模态⼤模型的桌⾯ GUI 智能体
 
 ## 第二周功能
