@@ -322,12 +322,15 @@ class OpenAICompatibleVisionClient:
             for key, value in usage_body.items()
             if isinstance(value, int)
         }
+        metadata = {"base_url": self.base_url}
+        if "finish_reason" in body["choices"][0]:
+            metadata["finish_reason"] = body["choices"][0]["finish_reason"]
         return MultimodalResponse(
             text=text,
             provider="openai-compatible",
             model=self.model,
             usage=usage,
-            metadata={"base_url": self.base_url},
+            metadata=metadata,
         )
 
     def _payload(self, request: MultimodalRequest) -> dict[str, Any]:

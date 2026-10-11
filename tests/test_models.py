@@ -104,6 +104,38 @@ def test_api_text_request_and_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.usage == {"prompt_tokens": 11, "completion_tokens": 4}
 
 
+@pytest.mark.parametrize("finish_reason", ["stop", "length", None, "provider-specific", "missing"])
+def test_api_preserves_finish_reason_without_changing_response_text(
+    finish_reason: str | None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_text = '{"status":"action","action":{"type":"click"}}'
+    choice = {"message": {"content": raw_text}}
+    if finish_reason != "missing":
+        choice["finish_reason"] = finish_reason
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"choices": [choice]})
+
+    monkeypatch.setenv("TEST_API_KEY", "secret")
+    client = OpenAICompatibleVisionClient(
+        "vision-model", "https://example.test/v1", api_key_env="TEST_API_KEY",
+        transport=httpx.MockTransport(handler),
+    )
+
+    response = client.generate(MultimodalRequest(instruction="Propose one action"))
+
+    assert response.text == raw_text
+    assert response.metadata["base_url"] == "https://example.test/v1"
+    if finish_reason == "missing":
+        assert "finish_reason" not in response.metadata
+    else:
+        assert response.metadata["finish_reason"] == finish_reason
+    assert "secret" not in json.dumps(response.metadata)
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize(("suffix", "mime"), [("png", "image/png"), ("jpg", "image/jpeg")])
 def test_api_encodes_local_image_as_data_url(
     suffix: str,

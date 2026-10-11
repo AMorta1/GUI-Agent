@@ -13,6 +13,8 @@ import pyperclip
 
 ScreenPoint: TypeAlias = tuple[int, int]
 VALID_BUTTONS = {"left", "middle", "right"}
+VALID_KEYS = {"enter", "esc"}
+VALID_HOTKEYS = {("ctrl", "a"), ("ctrl", "l"), ("ctrl", "o"), ("alt", "f4")}
 
 
 class DesktopController:
@@ -58,6 +60,22 @@ class DesktopController:
         pyperclip.copy(text)
         modifier = "command" if sys.platform == "darwin" else "ctrl"
         self._backend.hotkey(modifier, "v")
+
+    def press(self, key: str) -> None:
+        """Press one allowed key; the caller must verify focus and authorization."""
+        if not isinstance(key, str):
+            raise TypeError("Key must be a string")
+        if key not in VALID_KEYS:
+            raise ValueError(f"Key must be one of: {sorted(VALID_KEYS)}")
+        self._backend.press(key)
+
+    def hotkey(self, *keys: str) -> None:
+        """Send one allowed shortcut; the caller must verify focus and authorization."""
+        if any(not isinstance(key, str) for key in keys):
+            raise TypeError("Hotkey keys must be strings")
+        if keys not in VALID_HOTKEYS:
+            raise ValueError(f"Hotkey must be one of: {sorted(VALID_HOTKEYS)}")
+        self._backend.hotkey(*keys)
 
     def scroll(self, clicks: int, *, point: ScreenPoint | None = None) -> None:
         if not isinstance(clicks, int) or isinstance(clicks, bool):
